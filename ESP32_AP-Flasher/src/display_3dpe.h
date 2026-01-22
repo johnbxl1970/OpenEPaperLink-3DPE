@@ -19,6 +19,7 @@
 #include <GxEPD2_BW.h>
 #include <SPI.h>
 #include <WiFi.h>
+#include "device_config.h"
 
 // ePaper display pin definitions for XIAO ePaper Driver Board V2
 // Reference: https://wiki.seeedstudio.com/xiao_eink_expansion_board_v2/
@@ -47,12 +48,20 @@ public:
 
   /**
    * Initialize the ePaper display
+   * @param rotation Display rotation (0-3), defaults to 1 (landscape)
    */
-  static void init();
+  static void init(int rotation = 1);
 
   /**
    * Show the startup screen with device information
    * Called on boot or firmware update
+   * @param config Device configuration (uses defaults if not provided)
+   */
+  static void showStartupScreen(const DeviceConfig& config);
+
+  /**
+   * Show the startup screen with default configuration
+   * For backward compatibility
    */
   static void showStartupScreen();
 
@@ -66,8 +75,9 @@ public:
   /**
    * Render the complete startup screen layout
    * @param info Device information
+   * @param config Device configuration for display settings
    */
-  static void renderStartupLayout(const DeviceInfo& info);
+  static void renderStartupLayout(const DeviceInfo& info, const DeviceConfig& config);
 
   /**
    * Draw 3DPE logo in top right corner

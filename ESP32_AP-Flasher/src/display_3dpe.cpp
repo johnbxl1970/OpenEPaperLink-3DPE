@@ -2,8 +2,7 @@
  * display_3dpe.cpp
  *
  * 3DPE Custom Startup Screen Implementation
- *
- * Place this file in: ESP32_AP-Flasher/src/display_3dpe.cpp
+ * Supports server-configurable display settings
  */
 
 #include "display_3dpe.h"
@@ -19,7 +18,7 @@ GxEPD2_BW<DISPLAY_CLASS, DISPLAY_CLASS::HEIGHT>* Display3DPE::display = nullptr;
 /**
  * Initialize the ePaper display
  */
-void Display3DPE::init() {
+void Display3DPE::init(int rotation) {
   if (!display) {
     // Short delay to let hardware stabilize
     delay(100);
@@ -35,15 +34,15 @@ void Display3DPE::init() {
   // Initialize display with longer reset duration for better compatibility
   display->init(115200, true, 10, false);  // serial, initial=true, reset_duration=10ms, pulldown_rst=false
   delay(100);
-  display->setRotation(1);  // Landscape orientation
+  display->setRotation(rotation);
   display->setTextColor(GxEPD_BLACK);
 }
 
 /**
- * Show the startup screen with device information
+ * Show the startup screen with device information (with config)
  */
-void Display3DPE::showStartupScreen() {
-  init();
+void Display3DPE::showStartupScreen(const DeviceConfig& config) {
+  init(config.display_rotation);
 
   // Show connecting message while fetching data
   showConnecting();
@@ -54,11 +53,18 @@ void Display3DPE::showStartupScreen() {
   // Fetch device info from server
   DeviceInfo info = fetchDeviceInfo(macAddress);
 
-  // Render the startup screen
-  renderStartupLayout(info);
+  // Render the startup screen with config
+  renderStartupLayout(info, config);
 
   // Power down display to save energy
   display->hibernate();
+}
+
+/**
+ * Show the startup screen with default configuration (backward compatibility)
+ */
+void Display3DPE::showStartupScreen() {
+  showStartupScreen(DEFAULT_DEVICE_CONFIG);
 }
 
 /**
@@ -96,14 +102,17 @@ Display3DPE::DeviceInfo Display3DPE::fetchDeviceInfo(const String& macAddress) {
     DeserializationError error = deserializeJson(doc, payload);
 
     if (!error) {
+      // Handle both direct properties and nested data object
+      JsonObject data = doc.containsKey("data") ? doc["data"].as<JsonObject>() : doc.as<JsonObject>();
+
       // Extract device information
-      if (doc.containsKey("device_name")) {
-        info.name = doc["device_name"].as<String>();
+      if (data.containsKey("device_name")) {
+        info.name = data["device_name"].as<String>();
         info.registered = true;
       }
 
-      if (doc.containsKey("metadata")) {
-        JsonObject metadata = doc["metadata"];
+      if (data.containsKey("metadata")) {
+        JsonObject metadata = data["metadata"];
 
         if (metadata.containsKey("device_type")) {
           info.deviceType = metadata["device_type"].as<String>();
@@ -129,17 +138,19 @@ Display3DPE::DeviceInfo Display3DPE::fetchDeviceInfo(const String& macAddress) {
 }
 
 /**
- * Render the complete startup screen layout
+ * Render the complete startup screen layout with config
  */
-void Display3DPE::renderStartupLayout(const DeviceInfo& info) {
+void Display3DPE::renderStartupLayout(const DeviceInfo& info, const DeviceConfig& config) {
   display->setFullWindow();
   display->firstPage();
 
   do {
     display->fillScreen(GxEPD_WHITE);
 
-    // Draw 3DPE logo in top right corner (64x64 pixels)
-    drawLogo(DISPLAY_WIDTH - 70, 6);
+    // Draw 3DPE logo in top right corner (64x64 pixels) if enabled
+    if (config.show_logo) {
+      drawLogo(DISPLAY_WIDTH - 70, 6);
+    }
 
     // Draw device information - left side
     display->setFont(&FreeSans9pt7b);
