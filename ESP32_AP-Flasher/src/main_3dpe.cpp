@@ -7,10 +7,52 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <HTTPClient.h>
 #include "display_3dpe.h"
 
 // WiFi connection timeout (30 seconds)
 #define WIFI_TIMEOUT_MS 30000
+
+// Heartbeat interval (60 seconds)
+#define HEARTBEAT_INTERVAL_MS 60000
+
+/**
+ * Send heartbeat to ESL Manager server
+ * POST /api/devices/heartbeat
+ */
+bool sendHeartbeat() {
+  if (WiFi.status() != WL_CONNECTED) {
+    return false;
+  }
+
+  HTTPClient http;
+  String url = String(SERVER_URL) + "/api/devices/heartbeat";
+
+  http.begin(url);
+  http.addHeader("Content-Type", "application/json");
+
+  // Build JSON payload
+  String payload = "{";
+  payload += "\"mac_address\":\"" + WiFi.macAddress() + "\",";
+  payload += "\"signal_strength\":" + String(WiFi.RSSI()) + ",";
+  payload += "\"firmware_version\":\"1.0.0\",";
+  payload += "\"metadata\":{";
+  payload += "\"ip_address\":\"" + WiFi.localIP().toString() + "\",";
+  payload += "\"device_type\":\"" + String(DEVICE_TYPE) + "\"";
+  payload += "}}";
+
+  int httpCode = http.POST(payload);
+
+  if (httpCode == 200) {
+    Serial.println("Heartbeat sent successfully");
+    http.end();
+    return true;
+  } else {
+    Serial.printf("Heartbeat failed: %d\n", httpCode);
+    http.end();
+    return false;
+  }
+}
 
 void setup() {
   // Initialize serial
@@ -64,14 +106,10 @@ void setup() {
 }
 
 void loop() {
-  // Simple heartbeat - device is mostly idle
-  // In production, this would check for updates from server
-  delay(60000);  // Check every minute
+  delay(HEARTBEAT_INTERVAL_MS);
 
-  // Optional: Send heartbeat to server
   if (WiFi.status() == WL_CONNECTED) {
-    // TODO: Implement heartbeat to ESL Manager
-    Serial.println("Heartbeat...");
+    sendHeartbeat();
   } else {
     // Try to reconnect
     Serial.println("WiFi disconnected, attempting reconnect...");
