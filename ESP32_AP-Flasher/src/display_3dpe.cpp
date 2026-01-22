@@ -14,19 +14,27 @@
 #include <Fonts/FreeSans12pt7b.h>
 
 // Initialize static display pointer
-GxEPD2_BW<GxEPD2_290_GDEY029T94, GxEPD2_290_GDEY029T94::HEIGHT>* Display3DPE::display = nullptr;
+GxEPD2_BW<DISPLAY_CLASS, DISPLAY_CLASS::HEIGHT>* Display3DPE::display = nullptr;
 
 /**
  * Initialize the ePaper display
  */
 void Display3DPE::init() {
   if (!display) {
-    display = new GxEPD2_BW<GxEPD2_290_GDEY029T94, GxEPD2_290_GDEY029T94::HEIGHT>(
-      GxEPD2_290_GDEY029T94(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY)
+    // Short delay to let hardware stabilize
+    delay(100);
+
+    // Initialize SPI with XIAO ESP32C3 default pins
+    SPI.begin();
+
+    display = new GxEPD2_BW<DISPLAY_CLASS, DISPLAY_CLASS::HEIGHT>(
+      DISPLAY_CLASS(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY)
     );
   }
 
-  display->init(115200);
+  // Initialize display with longer reset duration for better compatibility
+  display->init(115200, true, 10, false);  // serial, initial=true, reset_duration=10ms, pulldown_rst=false
+  delay(100);
   display->setRotation(1);  // Landscape orientation
   display->setTextColor(GxEPD_BLACK);
 }

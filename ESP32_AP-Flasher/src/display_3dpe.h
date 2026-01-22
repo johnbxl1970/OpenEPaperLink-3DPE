@@ -1,15 +1,15 @@
 /**
  * display_3dpe.h
  *
- * 3DPE Custom Startup Screen for XIAO ESP32C3
+ * 3DPE Custom Startup Screen for XIAO ESP32-C3
  * Displays device information and 3DPE branding on 2.9" ePaper display
  *
  * Hardware:
- * - Seeed XIAO ESP32C3
- * - XIAO eInk Expansion Board
- * - 2.9" Monochrome ePaper (296x128 pixels)
+ * - Seeed XIAO ESP32-C3
+ * - Seeed ePaper Driver Board for XIAO V2
+ * - 2.9" Monochrome ePaper (296x128 pixels, SSD1680 controller)
  *
- * Place this file in: ESP32_AP-Flasher/src/display_3dpe.h
+ * See README_3DPE.md for complete hardware documentation and pin mappings.
  */
 
 #ifndef DISPLAY_3DPE_H
@@ -17,17 +17,23 @@
 
 #include <Arduino.h>
 #include <GxEPD2_BW.h>
+#include <SPI.h>
 #include <WiFi.h>
 
-// ePaper display pin definitions for XIAO eInk Expansion Board
-#define EPD_CS      D7  // Chip Select
-#define EPD_DC      D3  // Data/Command
-#define EPD_RST     D2  // Reset
-#define EPD_BUSY    D1  // Busy signal
+// ePaper display pin definitions for XIAO ePaper Driver Board V2
+// Reference: https://wiki.seeedstudio.com/xiao_eink_expansion_board_v2/
+#define EPD_RST     D0  // Reset (GPIO 2)
+#define EPD_CS      D1  // Chip Select (GPIO 3)
+#define EPD_BUSY    D2  // Busy signal (GPIO 4)
+#define EPD_DC      D3  // Data/Command (GPIO 5)
 
 // Display dimensions
 #define DISPLAY_WIDTH   296
 #define DISPLAY_HEIGHT  128
+
+// 2.9" display driver - try different variants if display doesn't work
+// Options: GxEPD2_290_T5, GxEPD2_290_T5D, GxEPD2_290_BS, GxEPD2_290, GxEPD2_290_T94
+#define DISPLAY_CLASS GxEPD2_290_BS
 
 class Display3DPE {
 public:
@@ -89,7 +95,7 @@ public:
   static void showConnecting();
 
 private:
-  static GxEPD2_BW<GxEPD2_290_GDEY029T94, GxEPD2_290_GDEY029T94::HEIGHT>* display;
+  static GxEPD2_BW<DISPLAY_CLASS, DISPLAY_CLASS::HEIGHT>* display;
 };
 
 #endif // DISPLAY_3DPE_H
