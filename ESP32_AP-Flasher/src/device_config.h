@@ -75,9 +75,10 @@ public:
   /**
    * Fetch configuration from server
    * @param macAddress Device MAC address
+   * @param serverURL Optional server URL (uses SERVER_URL define if empty)
    * @return true if config was fetched successfully
    */
-  static bool fetchConfig(const String& macAddress);
+  static bool fetchConfig(const String& macAddress, const String& serverURL = "");
 
   /**
    * Get the current device configuration

@@ -1,0 +1,161 @@
+name: SMD Firmware Release
+
+on:
+  # Trigger on version tags for SMD firmware releases
+  push:
+    tags:
+      - 'smd-v*'
+
+  # Allow manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create GitHub Release'
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  build-release:
+    name: Build SMD Release Firmware
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup PlatformIO
+        uses: ./.github/actions/setup-pio
+
+      - name: Get Version Info
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="dev-${{ github.sha }}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+
+      - name: Build SMD 2.9" Generic Firmware
+        env:
+          PLATFORMIO_BUILD_FLAGS: >-
+            -D BUILD_VERSION=\"${{ steps.version.outputs.version }}\"
+            -D SHA=\"${{ github.sha }}\"
+        run: |
+          cd ESP32_AP-Flasher
+          pio run --environment SMD_2inch9_generic
+
+      - name: Build SMD 4.2" Generic Firmware
+        env:
+          PLATFORMIO_BUILD_FLAGS: >-
+            -D BUILD_VERSION=\"${{ steps.version.outputs.version }}\"
+            -D SHA=\"${{ github.sha }}\"
+        run: |
+          cd ESP32_AP-Flasher
+          pio run --environment SMD_4inch2_generic
+
+      - name: Prepare Release Artifacts
+        run: |
+          mkdir -p release
+
+          # Copy firmware binaries with descriptive names
+          cp ESP32_AP-Flasher/.pio/build/SMD_2inch9_generic/firmware.bin release/smd-2inch9-${{ steps.version.outputs.version }}.bin
+          cp ESP32_AP-Flasher/.pio/build/SMD_4inch2_generic/firmware.bin release/smd-4inch2-${{ steps.version.outputs.version }}.bin
+
+          # Also create generic names for latest
+          cp release/smd-2inch9-${{ steps.version.outputs.version }}.bin release/smd-2inch9-latest.bin
+          cp release/smd-4inch2-${{ steps.version.outputs.version }}.bin release/smd-4inch2-latest.bin
+
+          # Generate checksums
+          cd release
+          sha256sum *.bin > checksums.sha256
+          cat checksums.sha256
+
+          # Create release metadata JSON
+          cat > release-info.json << EOF
+          {
+            "version": "${{ steps.version.outputs.version }}",
+            "commit": "${{ github.sha }}",
+            "built_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "firmware": [
+              {
+                "type": "SMD_2inch9",
+                "display": "2.9 inch (296x128)",
+                "file": "smd-2inch9-${{ steps.version.outputs.version }}.bin",
+                "latest_file": "smd-2inch9-latest.bin"
+              },
+              {
+                "type": "SMD_4inch2",
+                "display": "4.2 inch (400x300)",
+                "file": "smd-4inch2-${{ steps.version.outputs.version }}.bin",
+                "latest_file": "smd-4inch2-latest.bin"
+              }
+            ],
+            "provisioning": {
+              "method": "serial",
+              "protocol": "json",
+              "commands": ["get_info", "set_wifi", "set_wifi_backup", "set_server", "provision", "reset", "reboot"]
+            }
+          }
+          EOF
+          cat release-info.json
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: smd-firmware-${{ steps.version.outputs.version }}
+          path: release/
+          retention-days: 90
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.create_release)
+        uses: softprops/action-gh-release@v2
+        with:
+          name: SMD Firmware ${{ steps.version.outputs.version }}
+          tag_name: ${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          body: |
+            ## Smart Manufacturing Display Firmware
+
+            Pre-built firmware for SMD devices with serial-based provisioning.
+
+            ### Available Firmware
+
+            | Display | File | Resolution |
+            |---------|------|------------|
+            | 2.9" ePaper | `smd-2inch9-${{ steps.version.outputs.version }}.bin` | 296x128 |
+            | 4.2" ePaper | `smd-4inch2-${{ steps.version.outputs.version }}.bin` | 400x300 |
+
+            ### Installation
+
+            1. Download the firmware for your display size
+            2. Flash using ESL Manager's web installer or esptool
+            3. Configure WiFi and server URL via serial provisioning
+
+            ### Serial Provisioning Commands
+
+            After flashing, connect via USB serial (115200 baud) and send JSON commands:
+
+            ```json
+            {"cmd": "get_info"}
+            {"cmd": "set_wifi", "ssid": "YourNetwork", "password": "YourPassword"}
+            {"cmd": "set_server", "url": "http://your-server:3001"}
+            {"cmd": "provision"}
+            ```
+
+            ### Checksums
+
+            See `checksums.sha256` for file integrity verification.
+
+          files: |
+            release/smd-2inch9-${{ steps.version.outputs.version }}.bin
+            release/smd-4inch2-${{ steps.version.outputs.version }}.bin
+            release/smd-2inch9-latest.bin
+            release/smd-4inch2-latest.bin
+            release/checksums.sha256
+            release/release-info.json
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

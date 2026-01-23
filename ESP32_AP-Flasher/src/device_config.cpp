@@ -25,14 +25,15 @@ void DeviceConfigManager::init() {
 /**
  * Fetch configuration from server
  */
-bool DeviceConfigManager::fetchConfig(const String& macAddress) {
+bool DeviceConfigManager::fetchConfig(const String& macAddress, const String& serverURL) {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("[Config] WiFi not connected, using defaults");
     return false;
   }
 
-  // Build config endpoint URL
-  String url = String(SERVER_URL) + "/api/devices/mac/" + macAddress + "/config";
+  // Build config endpoint URL - use passed serverURL or fall back to SERVER_URL define
+  String baseUrl = serverURL.length() > 0 ? serverURL : String(SERVER_URL);
+  String url = baseUrl + "/api/devices/mac/" + macAddress + "/config";
   Serial.printf("[Config] Fetching from: %s\n", url.c_str());
 
   HTTPClient http;
