@@ -20,6 +20,7 @@
 #include <SPI.h>
 #include <WiFi.h>
 #include "device_config.h"
+#include "battery.h"
 
 // ePaper display pin definitions for XIAO ePaper Driver Board V2
 // Reference: https://wiki.seeedstudio.com/xiao_eink_expansion_board_v2/

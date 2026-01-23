@@ -16,6 +16,7 @@
 #include <ArduinoJson.h>
 #include "display_3dpe.h"
 #include "device_config.h"
+#include "battery.h"
 
 /**
  * Send heartbeat to ESL Manager server
@@ -26,21 +27,27 @@ int sendHeartbeat() {
     return -1;
   }
 
+  // Get battery status
+  BatteryStatus battery = BatteryMonitor::getStatus();
+
   HTTPClient http;
   String url = String(SERVER_URL) + "/api/devices/heartbeat";
 
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
 
-  // Build JSON payload
+  // Build JSON payload with battery info
   String payload = "{";
   payload += "\"mac_address\":\"" + WiFi.macAddress() + "\",";
   payload += "\"signal_strength\":" + String(WiFi.RSSI()) + ",";
-  payload += "\"firmware_version\":\"1.1.0\",";
+  payload += "\"firmware_version\":\"1.2.0\",";
+  payload += "\"battery_mv\":" + String(battery.voltage_mv) + ",";
+  payload += "\"battery_percent\":" + String(battery.percentage) + ",";
   payload += "\"metadata\":{";
   payload += "\"ip_address\":\"" + WiFi.localIP().toString() + "\",";
   payload += "\"device_type\":\"" + String(DEVICE_TYPE) + "\",";
-  payload += "\"config_version\":" + String(DeviceConfigManager::getConfigVersion());
+  payload += "\"config_version\":" + String(DeviceConfigManager::getConfigVersion()) + ",";
+  payload += "\"battery_charging\":" + String(battery.is_charging ? "true" : "false");
   payload += "}}";
 
   int httpCode = http.POST(payload);
@@ -107,11 +114,15 @@ void setup() {
   Serial.println("\n\n=================================");
   Serial.println("3DPE Smart Manufacturing ESL");
   Serial.println("XIAO ESP32C3 + 2.9\" ePaper");
-  Serial.println("Firmware v1.1.0 (Server Config)");
+  Serial.println("Firmware v1.2.0 (Battery Monitor)");
   Serial.println("=================================");
 
   // Initialize config manager with defaults
   DeviceConfigManager::init();
+
+  // Initialize battery monitor
+  BatteryMonitor::init();
+  BatteryMonitor::printStatus();
 
   // Print device info
   Serial.print("MAC Address: ");

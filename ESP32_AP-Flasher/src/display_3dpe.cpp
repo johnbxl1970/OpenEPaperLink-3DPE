@@ -440,8 +440,51 @@ void Display3DPE::renderSmartPrinterLayout(const PrinterStatus& status) {
 
     // === Footer ===
     display->drawLine(0, 115, 296, 115, GxEPD_BLACK);
+
+    // Get battery status
+    BatteryStatus battery = BatteryMonitor::getStatus();
+
+    // Battery icon on the left (graphical indicator)
+    int battX = 8;
+    int battY = 118;
+    int battW = 20;
+    int battH = 8;
+
+    // Draw battery outline
+    display->drawRect(battX, battY, battW, battH, GxEPD_BLACK);
+    // Draw battery tip
+    display->fillRect(battX + battW, battY + 2, 2, 4, GxEPD_BLACK);
+
     display->setFont(NULL);
-    display->setCursor(115, 120);
+
+    if (battery.is_valid) {
+      // Fill battery level (proportional to percentage)
+      int fillW = (battery.percentage * (battW - 2)) / 100;
+      if (fillW > 0) {
+        display->fillRect(battX + 1, battY + 1, fillW, battH - 2, GxEPD_BLACK);
+      }
+
+      // Battery percentage text next to icon
+      display->setCursor(battX + battW + 6, 120);
+      display->print(battery.percentage);
+      display->print("%");
+
+      // Charging indicator
+      if (battery.is_charging) {
+        display->setCursor(battX + battW + 30, 120);
+        display->print("+");
+      }
+    } else {
+      // Invalid reading - draw X in battery and show N/A
+      display->drawLine(battX + 2, battY + 2, battX + battW - 3, battY + battH - 3, GxEPD_BLACK);
+      display->drawLine(battX + 2, battY + battH - 3, battX + battW - 3, battY + 2, GxEPD_BLACK);
+
+      display->setCursor(battX + battW + 6, 120);
+      display->print("N/A");
+    }
+
+    // SmartPrinter label on the right
+    display->setCursor(220, 120);
     display->print("SmartPrinter");
 
   } while (display->nextPage());
