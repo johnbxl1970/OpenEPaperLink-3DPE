@@ -374,24 +374,30 @@ void Display3DPE::renderSmartPrinterLayout(const PrinterStatus& status) {
     display->fillRect(0, 0, 296, 32, GxEPD_BLACK);
 
     // Printer name (white text on black)
-    display->setFont(&FreeSans12pt7b);
+    display->setFont(&FreeSans9pt7b);  // Smaller font to fit more text
     display->setTextColor(GxEPD_WHITE);
-    display->setCursor(8, 22);
-    // Truncate printer name if too long
+    display->setCursor(8, 20);
+    // Truncate printer name if too long (max ~18 chars with smaller font)
     String printerName = status.printerName;
-    if (printerName.length() > 14) {
-      printerName = printerName.substring(0, 14);
+    if (printerName.length() > 18) {
+      printerName = printerName.substring(0, 18);
     }
     display->print(printerName);
 
-    // Status badge (white box with black text)
-    display->fillRect(220, 6, 68, 20, GxEPD_WHITE);
+    // Status badge (white box with black text) - wider to fit "ONLINE"
+    int badgeWidth = 76;
+    int badgeX = 296 - badgeWidth - 4;  // 4px margin from right edge
+    display->fillRect(badgeX, 6, badgeWidth, 20, GxEPD_WHITE);
     display->setFont(&FreeSans9pt7b);
     display->setTextColor(GxEPD_BLACK);
-    // Center the status text
-    int statusWidth = status.status.length() * 7;
-    int statusX = 254 - (statusWidth / 2);
-    display->setCursor(statusX, 20);
+
+    // Center the status text in the badge using getTextBounds
+    int16_t tbx, tby;
+    uint16_t tbw, tbh;
+    display->getTextBounds(status.status, 0, 0, &tbx, &tby, &tbw, &tbh);
+    int statusX = badgeX + (badgeWidth - tbw) / 2;
+    int statusY = 6 + (20 + tbh) / 2;  // Vertically center in badge
+    display->setCursor(statusX, statusY);
     display->print(status.status);
 
     // === Content area ===
