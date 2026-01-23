@@ -264,3 +264,179 @@ void Display3DPE::showConnecting() {
 
   } while (display->nextPage());
 }
+
+/**
+ * Update display with SmartPrinter status
+ */
+void Display3DPE::updateSmartPrinterStatus() {
+  init(1);  // Landscape mode
+
+  String macAddress = WiFi.macAddress();
+  PrinterStatus status = fetchPrinterStatus(macAddress);
+  renderSmartPrinterLayout(status);
+
+  display->hibernate();
+}
+
+/**
+ * Fetch printer status from ESL Manager server
+ */
+Display3DPE::PrinterStatus Display3DPE::fetchPrinterStatus(const String& macAddress) {
+  PrinterStatus status;
+  status.printerName = "Unregistered";
+  status.status = "UNKNOWN";
+  status.jobId = "--";
+  status.orderNumber = "--";
+  status.itemNumber = "--";
+  status.boxId = "--";
+  status.queueCount = 0;
+  status.registered = false;
+
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi not connected");
+    status.status = "NO WIFI";
+    return status;
+  }
+
+  // Fetch from SmartPrinter API endpoint
+  String url = String(SERVER_URL) + "/api/smartprinter/mac/" + macAddress + "/data";
+  Serial.printf("Fetching printer status from: %s\n", url.c_str());
+
+  HTTPClient http;
+  http.begin(url);
+  http.setTimeout(10000);
+
+  int httpCode = http.GET();
+
+  if (httpCode == 200) {
+    String payload = http.getString();
+    Serial.printf("Response: %s\n", payload.c_str());
+
+    StaticJsonDocument<2048> doc;
+    DeserializationError error = deserializeJson(doc, payload);
+
+    if (!error) {
+      // Check for nested data object
+      JsonObject data = doc.containsKey("data") ? doc["data"].as<JsonObject>() : doc.as<JsonObject>();
+
+      status.registered = true;
+
+      if (data.containsKey("printer_name")) {
+        status.printerName = data["printer_name"].as<String>();
+      }
+      if (data.containsKey("status")) {
+        status.status = data["status"].as<String>();
+        status.status.toUpperCase();
+      }
+      if (data.containsKey("job_id")) {
+        String val = data["job_id"].as<String>();
+        status.jobId = (val == "0" || val == "" || val == "null") ? "--" : val;
+      }
+      if (data.containsKey("order_number")) {
+        String val = data["order_number"].as<String>();
+        status.orderNumber = (val == "0" || val == "" || val == "null") ? "--" : val;
+      }
+      if (data.containsKey("item_number")) {
+        String val = data["item_number"].as<String>();
+        status.itemNumber = (val == "0" || val == "" || val == "null") ? "--" : val;
+      }
+      if (data.containsKey("box_id")) {
+        String val = data["box_id"].as<String>();
+        status.boxId = (val == "0" || val == "" || val == "null") ? "--" : val;
+      }
+      if (data.containsKey("queue_count")) {
+        status.queueCount = data["queue_count"].as<int>();
+      }
+    }
+  } else if (httpCode == 404) {
+    Serial.println("Device not registered or no printer assigned");
+    status.status = "NOT ASSIGNED";
+  } else {
+    Serial.printf("HTTP error: %d\n", httpCode);
+    status.status = "ERROR";
+  }
+
+  http.end();
+  return status;
+}
+
+/**
+ * Render the SmartPrinter template layout (matches 296x128 template)
+ */
+void Display3DPE::renderSmartPrinterLayout(const PrinterStatus& status) {
+  display->setFullWindow();
+  display->firstPage();
+
+  do {
+    display->fillScreen(GxEPD_WHITE);
+
+    // === Header bar (black background) ===
+    display->fillRect(0, 0, 296, 32, GxEPD_BLACK);
+
+    // Printer name (white text on black)
+    display->setFont(&FreeSans12pt7b);
+    display->setTextColor(GxEPD_WHITE);
+    display->setCursor(8, 22);
+    // Truncate printer name if too long
+    String printerName = status.printerName;
+    if (printerName.length() > 14) {
+      printerName = printerName.substring(0, 14);
+    }
+    display->print(printerName);
+
+    // Status badge (white box with black text)
+    display->fillRect(220, 6, 68, 20, GxEPD_WHITE);
+    display->setFont(&FreeSans9pt7b);
+    display->setTextColor(GxEPD_BLACK);
+    // Center the status text
+    int statusWidth = status.status.length() * 7;
+    int statusX = 254 - (statusWidth / 2);
+    display->setCursor(statusX, 20);
+    display->print(status.status);
+
+    // === Content area ===
+    display->setTextColor(GxEPD_BLACK);
+
+    // Job label and value
+    display->setFont(NULL);  // Default font for labels
+    display->setCursor(8, 40);
+    display->print("Job");
+    display->setFont(&FreeSans9pt7b);
+    display->setCursor(8, 62);
+    display->print(status.jobId);
+
+    // Order label and value
+    display->setFont(NULL);
+    display->setCursor(150, 40);
+    display->print("Order");
+    display->setFont(&FreeSans9pt7b);
+    display->setCursor(150, 62);
+    display->print(status.orderNumber);
+
+    // Separator line
+    display->drawLine(8, 72, 288, 72, GxEPD_BLACK);
+
+    // Item label and value
+    display->setFont(NULL);
+    display->setCursor(8, 80);
+    display->print("Item");
+    display->setFont(&FreeSans9pt7b);
+    display->setCursor(8, 102);
+    display->print(status.itemNumber);
+
+    // Box ID label and value
+    display->setFont(NULL);
+    display->setCursor(150, 80);
+    display->print("Box ID");
+    display->setFont(&FreeSans9pt7b);
+    display->setCursor(150, 102);
+    display->print(status.boxId);
+
+    // === Footer ===
+    display->drawLine(0, 115, 296, 115, GxEPD_BLACK);
+    display->setFont(NULL);
+    display->setCursor(115, 120);
+    display->print("SmartPrinter");
+
+  } while (display->nextPage());
+}

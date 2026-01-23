@@ -46,6 +46,18 @@ public:
     bool registered;
   };
 
+  // Printer status structure for SmartPrinter mode
+  struct PrinterStatus {
+    String printerName;
+    String status;
+    String jobId;
+    String orderNumber;
+    String itemNumber;
+    String boxId;
+    int queueCount;
+    bool registered;
+  };
+
   /**
    * Initialize the ePaper display
    * @param rotation Display rotation (0-3), defaults to 1 (landscape)
@@ -103,6 +115,25 @@ public:
    * Clear display and show "Connecting..." message
    */
   static void showConnecting();
+
+  /**
+   * Update display with SmartPrinter status
+   * Fetches printer data and renders the SmartPrinter template layout
+   */
+  static void updateSmartPrinterStatus();
+
+  /**
+   * Fetch printer status from ESL Manager server
+   * @param macAddress Device MAC address
+   * @return PrinterStatus structure with printer details
+   */
+  static PrinterStatus fetchPrinterStatus(const String& macAddress);
+
+  /**
+   * Render the SmartPrinter template layout (matches 296x128 template)
+   * @param status Printer status data
+   */
+  static void renderSmartPrinterLayout(const PrinterStatus& status);
 
 private:
   static GxEPD2_BW<DISPLAY_CLASS, DISPLAY_CLASS::HEIGHT>* display;

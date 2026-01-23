@@ -86,10 +86,9 @@ bool checkAndUpdateConfig(int serverConfigVersion) {
       Serial.println("Config updated successfully");
       DeviceConfigManager::printConfig();
 
-      // Refresh display with new config
-      Serial.println("Refreshing display with new config...");
-      DeviceConfig& config = DeviceConfigManager::getConfig();
-      Display3DPE::showStartupScreen(config);
+      // Refresh SmartPrinter display with new config
+      Serial.println("Refreshing SmartPrinter display with new config...");
+      Display3DPE::updateSmartPrinterStatus();
 
       return true;
     } else {
@@ -126,8 +125,8 @@ void setup() {
   DeviceConfig& config = DeviceConfigManager::getConfig();
   int wifiTimeout = config.wifi_timeout_seconds * 1000;
 
-  // Connect to WiFi
-  Serial.printf("\nConnecting to WiFi: %s\n", WIFI_SSID);
+  // Try primary WiFi first
+  Serial.printf("\nConnecting to primary WiFi: %s\n", WIFI_SSID);
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
@@ -138,8 +137,27 @@ void setup() {
   }
   Serial.println();
 
+  // If primary fails, try backup WiFi
+  #ifdef WIFI_SSID_BACKUP
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.printf("Primary WiFi failed. Trying backup: %s\n", WIFI_SSID_BACKUP);
+    WiFi.disconnect();
+    delay(500);
+    WiFi.begin(WIFI_SSID_BACKUP, WIFI_PASSWORD_BACKUP);
+
+    startTime = millis();
+    while (WiFi.status() != WL_CONNECTED && (millis() - startTime) < (unsigned long)wifiTimeout) {
+      delay(500);
+      Serial.print(".");
+    }
+    Serial.println();
+  }
+  #endif
+
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("WiFi Connected!");
+    Serial.print("Network: ");
+    Serial.println(WiFi.SSID());
     Serial.print("IP Address: ");
     Serial.println(WiFi.localIP());
     Serial.print("Signal Strength: ");
@@ -154,16 +172,16 @@ void setup() {
       Serial.println("Using default config");
     }
   } else {
-    Serial.println("WiFi connection failed - continuing in offline mode");
+    Serial.println("WiFi connection failed (both networks) - continuing in offline mode");
   }
 
   // Get updated config (may have changed after fetch)
   config = DeviceConfigManager::getConfig();
 
-  // Display 3DPE startup screen with config
-  Serial.println("\nDisplaying startup screen...");
-  Display3DPE::showStartupScreen(config);
-  Serial.println("Startup screen complete");
+  // Display SmartPrinter status screen
+  Serial.println("\nDisplaying SmartPrinter status...");
+  Display3DPE::updateSmartPrinterStatus();
+  Serial.println("SmartPrinter display complete");
 
   Serial.println("\n=================================");
   Serial.printf("Device ready - heartbeat every %d seconds\n", config.heartbeat_interval_seconds);
@@ -184,15 +202,25 @@ void loop() {
     // Check if config needs update
     bool configUpdated = checkAndUpdateConfig(serverConfigVersion);
 
-    // Refresh display on heartbeat if enabled (and config wasn't just updated)
+    // Refresh SmartPrinter display on heartbeat if enabled (and config wasn't just updated)
     if (!configUpdated && config.display_refresh_on_heartbeat) {
-      Serial.println("Refreshing display on heartbeat...");
-      Display3DPE::showStartupScreen(config);
+      Serial.println("Refreshing SmartPrinter display...");
+      Display3DPE::updateSmartPrinterStatus();
     }
   } else {
-    // Try to reconnect
+    // Try to reconnect - try primary first, then backup
     Serial.println("WiFi disconnected, attempting reconnect...");
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     delay(5000);
+
+    #ifdef WIFI_SSID_BACKUP
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println("Primary failed, trying backup WiFi...");
+      WiFi.disconnect();
+      delay(500);
+      WiFi.begin(WIFI_SSID_BACKUP, WIFI_PASSWORD_BACKUP);
+      delay(5000);
+    }
+    #endif
   }
 }
