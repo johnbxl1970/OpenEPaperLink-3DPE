@@ -1,23 +1,31 @@
-name: SMD Firmware Release
+name: SMD Firmware Build & Release
 
 on:
-  # Trigger on version tags for SMD firmware releases
+  # Build on every push to main and feature branches, and on version tags
   push:
+    branches:
+      - main
+      - 'feature/**'
+      - 'fix/**'
     tags:
       - 'smd-v*'
+    paths:
+      - 'ESP32_AP-Flasher/**'
+      - '.github/workflows/smd-release.yml'
+      - '.github/actions/setup-pio/**'
 
-  # Allow manual trigger for testing
+  # Allow manual trigger
   workflow_dispatch:
     inputs:
       create_release:
         description: 'Create GitHub Release'
         required: true
         type: boolean
-        default: true
+        default: false
 
 jobs:
-  build-release:
-    name: Build SMD Release Firmware
+  build:
+    name: Build SMD Firmware
     runs-on: ubuntu-22.04
 
     steps:
@@ -30,13 +38,20 @@ jobs:
       - name: Get Version Info
         id: version
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          if [[ "${{ github.ref }}" == refs/tags/smd-v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/}"
+            IS_RELEASE="true"
           else
-            VERSION="dev-${{ github.sha }}"
+            # For non-tag builds, use branch name and short SHA
+            BRANCH="${GITHUB_REF#refs/heads/}"
+            BRANCH_SAFE=$(echo "$BRANCH" | sed 's/[^a-zA-Z0-9]/-/g')
+            SHORT_SHA="${GITHUB_SHA:0:7}"
+            VERSION="dev-${BRANCH_SAFE}-${SHORT_SHA}"
+            IS_RELEASE="false"
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Building version: $VERSION"
+          echo "is_release=$IS_RELEASE" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION (release: $IS_RELEASE)"
 
       - name: Build SMD 2.9" Generic Firmware
         env:
@@ -56,41 +71,37 @@ jobs:
           cd ESP32_AP-Flasher
           pio run --environment SMD_4inch2_generic
 
-      - name: Prepare Release Artifacts
+      - name: Prepare Artifacts
         run: |
-          mkdir -p release
+          mkdir -p artifacts
 
           # Copy firmware binaries with descriptive names
-          cp ESP32_AP-Flasher/.pio/build/SMD_2inch9_generic/firmware.bin release/smd-2inch9-${{ steps.version.outputs.version }}.bin
-          cp ESP32_AP-Flasher/.pio/build/SMD_4inch2_generic/firmware.bin release/smd-4inch2-${{ steps.version.outputs.version }}.bin
-
-          # Also create generic names for latest
-          cp release/smd-2inch9-${{ steps.version.outputs.version }}.bin release/smd-2inch9-latest.bin
-          cp release/smd-4inch2-${{ steps.version.outputs.version }}.bin release/smd-4inch2-latest.bin
+          cp ESP32_AP-Flasher/.pio/build/SMD_2inch9_generic/firmware.bin artifacts/smd-2inch9-${{ steps.version.outputs.version }}.bin
+          cp ESP32_AP-Flasher/.pio/build/SMD_4inch2_generic/firmware.bin artifacts/smd-4inch2-${{ steps.version.outputs.version }}.bin
 
           # Generate checksums
-          cd release
+          cd artifacts
           sha256sum *.bin > checksums.sha256
           cat checksums.sha256
 
-          # Create release metadata JSON
-          cat > release-info.json << EOF
+          # Create build metadata JSON
+          cat > build-info.json << EOF
           {
             "version": "${{ steps.version.outputs.version }}",
             "commit": "${{ github.sha }}",
+            "branch": "${{ github.ref_name }}",
             "built_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "is_release": ${{ steps.version.outputs.is_release }},
             "firmware": [
               {
                 "type": "SMD_2inch9",
                 "display": "2.9 inch (296x128)",
-                "file": "smd-2inch9-${{ steps.version.outputs.version }}.bin",
-                "latest_file": "smd-2inch9-latest.bin"
+                "file": "smd-2inch9-${{ steps.version.outputs.version }}.bin"
               },
               {
                 "type": "SMD_4inch2",
                 "display": "4.2 inch (400x300)",
-                "file": "smd-4inch2-${{ steps.version.outputs.version }}.bin",
-                "latest_file": "smd-4inch2-latest.bin"
+                "file": "smd-4inch2-${{ steps.version.outputs.version }}.bin"
               }
             ],
             "provisioning": {
@@ -100,17 +111,18 @@ jobs:
             }
           }
           EOF
-          cat release-info.json
+          cat build-info.json
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: smd-firmware-${{ steps.version.outputs.version }}
-          path: release/
-          retention-days: 90
+          path: artifacts/
+          retention-days: 30
 
+      # Only create releases for tagged builds or manual dispatch with create_release=true
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.create_release)
+        if: steps.version.outputs.is_release == 'true' || (github.event_name == 'workflow_dispatch' && inputs.create_release)
         uses: softprops/action-gh-release@v2
         with:
           name: SMD Firmware ${{ steps.version.outputs.version }}
@@ -150,12 +162,10 @@ jobs:
             See `checksums.sha256` for file integrity verification.
 
           files: |
-            release/smd-2inch9-${{ steps.version.outputs.version }}.bin
-            release/smd-4inch2-${{ steps.version.outputs.version }}.bin
-            release/smd-2inch9-latest.bin
-            release/smd-4inch2-latest.bin
-            release/checksums.sha256
-            release/release-info.json
+            artifacts/smd-2inch9-${{ steps.version.outputs.version }}.bin
+            artifacts/smd-4inch2-${{ steps.version.outputs.version }}.bin
+            artifacts/checksums.sha256
+            artifacts/build-info.json
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
